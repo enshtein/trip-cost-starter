@@ -25,6 +25,7 @@ page_header('Счета за месяц');
 <div id="billing-message" class="msg" hidden></div>
 
 <div id="billing-results" hidden>
+    <div id="billing-exclusions" class="msg warning" hidden></div>
     <table id="billing-preview" class="grid">
         <thead>
         <tr>

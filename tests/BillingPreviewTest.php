@@ -28,6 +28,7 @@ final class BillingPreviewTest extends TestCase
             ),
             'total_before' => '10.00',
             'total_after' => '100.00',
+            'excluded_trips' => array(),
         ), $preview);
         self::assertEqualsWithDelta(10.0, (float)db()->query('SELECT total FROM invoices WHERE id = 10')->fetchColumn(), 0.001);
         self::assertSame(1, (int)db()->query('SELECT COUNT(*) FROM invoice_lines')->fetchColumn());

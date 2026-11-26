@@ -78,6 +78,8 @@ function calc_share($trip_id)
 function billing_period_plan($period)
 {
     $db = db();
+    $eligible_trips = billing_eligible_trips($period);
+    $excluded_trip_ids = array_fill_keys($eligible_trips['excluded_ids'], true);
     $trips_statement = $db->prepare("SELECT DISTINCT t.id FROM trips t
         JOIN cargo c ON c.trip_id = t.id
         WHERE c.client_id = ?
@@ -85,6 +87,7 @@ function billing_period_plan($period)
           AND t.status <> 'cancelled'
         ORDER BY t.departure_date");
     $invoice_statement = $db->prepare('SELECT id, total FROM invoices WHERE client_id = ? AND period = ?');
+    $invoice_lines_statement = $db->prepare('SELECT trip_id, amount FROM invoice_lines WHERE invoice_id = ?');
     $clients = array();
     $total_before_cents = 0;
     $total_after_cents = 0;
@@ -98,13 +101,32 @@ function billing_period_plan($period)
 
         $invoice_statement->execute(array($client['id'], $period));
         $invoice = $invoice_statement->fetch();
+        $existing_lines = array();
+        if ($invoice) {
+            $invoice_lines_statement->execute(array($invoice['id']));
+            foreach ($invoice_lines_statement->fetchAll() as $line) {
+                $existing_lines[(int)$line['trip_id']] = (int)round((float)$line['amount'] * 100);
+            }
+        }
         $lines = array();
         $after_cents = 0;
         foreach ($trip_ids as $trip_id) {
+            $trip_id = (int)$trip_id;
+            if (isset($excluded_trip_ids[$trip_id])) {
+                if (isset($existing_lines[$trip_id])) {
+                    $lines[] = array('trip_id' => $trip_id, 'amount_cents' => $existing_lines[$trip_id]);
+                    $after_cents += $existing_lines[$trip_id];
+                }
+                continue;
+            }
             $shares = calc_share($trip_id);
             $amount_cents = (int)round($shares[$client['id']]['amount'] * 100);
-            $lines[] = array('trip_id' => (int)$trip_id, 'amount_cents' => $amount_cents);
+            $lines[] = array('trip_id' => $trip_id, 'amount_cents' => $amount_cents);
             $after_cents += $amount_cents;
+        }
+
+        if (!$invoice && !$lines) {
+            continue;
         }
 
         $before_cents = $invoice ? (int)round((float)$invoice['total'] * 100) : 0;
@@ -125,7 +147,42 @@ function billing_period_plan($period)
         'clients' => $clients,
         'total_before_cents' => $total_before_cents,
         'total_after_cents' => $total_after_cents,
+        'excluded_trips' => $eligible_trips['excluded_trips'],
     );
+}
+
+/**
+ * Рейсы месяца, которые можно пересчитать по объёму.
+ *
+ * Рейс без единого положительного объёма исключается из пересчёта: его
+ * существующие строки счёта сохраняются, а новый счёт только ради него не
+ * создаётся. Это не скрывает ошибку отрицательного объёма — она по-прежнему
+ * прерывает расчёт в calc_share().
+ */
+function billing_eligible_trips($period)
+{
+    $statement = db()->prepare("SELECT t.id, t.number,
+        EXISTS(SELECT 1 FROM cargo c WHERE c.trip_id = t.id AND c.volume_m3 > 0) AS has_positive_volume
+        FROM trips t
+        WHERE t.departure_date LIKE ? AND t.status <> 'cancelled'
+        ORDER BY t.departure_date, t.id");
+    $statement->execute(array($period . '%'));
+
+    $excluded_ids = array();
+    $excluded_trips = array();
+    foreach ($statement->fetchAll() as $trip) {
+        if ((int)$trip['has_positive_volume'] === 1) {
+            continue;
+        }
+        $excluded_ids[] = (int)$trip['id'];
+        $excluded_trips[] = array(
+            'trip_id' => (int)$trip['id'],
+            'number' => $trip['number'],
+            'reason' => 'Нет грузов с положительным объёмом',
+        );
+    }
+
+    return array('excluded_ids' => $excluded_ids, 'excluded_trips' => $excluded_trips);
 }
 
 /**
@@ -151,6 +208,7 @@ function billing_preview_period($period)
         'clients' => $clients,
         'total_before' => billing_format_cents($plan['total_before_cents']),
         'total_after' => billing_format_cents($plan['total_after_cents']),
+        'excluded_trips' => $plan['excluded_trips'],
     );
 }
 
@@ -161,7 +219,14 @@ function billing_apply_period($period)
 {
     $db = db();
     $plan = billing_period_plan($period);
-    $result = array('period' => $period, 'created' => 0, 'updated' => 0, 'unchanged' => 0, 'clients' => array());
+    $result = array(
+        'period' => $period,
+        'created' => 0,
+        'updated' => 0,
+        'unchanged' => 0,
+        'clients' => array(),
+        'excluded_trips' => $plan['excluded_trips'],
+    );
 
     $db->beginTransaction();
     try {

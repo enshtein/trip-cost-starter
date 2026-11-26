@@ -5,6 +5,7 @@ $(function () {
     var $table = $('#billing-preview');
     var $tbody = $table.find('tbody');
     var $message = $('#billing-message');
+    var $exclusions = $('#billing-exclusions');
     var $apply = $('#billing-apply');
     var preview = null;
 
@@ -35,6 +36,14 @@ $(function () {
         $table.find('[data-role="total-before"]').text(money(data.total_before));
         $table.find('[data-role="total-after"]').text(money(data.total_after));
         $table.find('[data-role="total-diff"]').text(signedMoney(Number(data.total_after) - Number(data.total_before)));
+        if (data.excluded_trips.length) {
+            $exclusions.text(
+                'Не пересчитаны рейсы без положительного объёма: ' +
+                $.map(data.excluded_trips, function (trip) { return trip.number; }).join(', ') + '.'
+            ).prop('hidden', false);
+        } else {
+            $exclusions.prop('hidden', true);
+        }
         $results.prop('hidden', false);
         $apply.prop('disabled', !data.clients.length);
     }

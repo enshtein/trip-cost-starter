@@ -187,23 +187,38 @@ final class BillingTest extends TestCase
         self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
     }
 
-    #[TestDox('Ошибка объёма откатывает формирование всех счетов за месяц')]
-    public function testBillingRollsBackAllInvoicesWhenTripHasNoPositiveVolume(): void
+    #[TestDox('Рейс без положительного объёма исключается из пересчёта, а его старые строки сохраняются')]
+    public function testBillingKeepsExistingLinesForTripWithoutPositiveVolume(): void
     {
         $this->addClient(1, 'Клиент А');
         $this->addClient(2, 'Клиент Б');
+        $this->addClient(3, 'Клиент В');
         $this->addTrip(1, '2026-09-01 10:00', 100.00);
         $this->addTrip(2, '2026-09-02 10:00', 200.00);
         $this->addCargo(1, 1, 1, 10, 1);
-        $this->addCargo(2, 2, 2, 10, null);
+        $this->addCargo(2, 2, 1, 10, null);
+        $this->addCargo(3, 2, 2, 10, 0);
+        $this->addCargo(4, 2, 3, 10, null);
+        db()->exec("INSERT INTO invoices (id, client_id, period, status, total) VALUES
+            (10, 1, '2026-09', 'sent', 120),
+            (11, 2, '2026-09', 'draft', 70)");
+        db()->exec('INSERT INTO invoice_lines (invoice_id, trip_id, amount) VALUES
+            (10, 1, 90), (10, 2, 30), (11, 2, 70)');
 
-        $this->expectException(DomainException::class);
-        try {
-            billing_run_period('2026-09');
-        } finally {
-            self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
-            self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoice_lines')->fetchColumn());
-        }
+        $result = billing_apply_period('2026-09');
+
+        self::assertSame(0, $result['created']);
+        self::assertSame(1, $result['updated']);
+        self::assertSame(1, $result['unchanged']);
+        self::assertSame(array(array(
+            'trip_id' => 2,
+            'number' => 'РЕЙС-2',
+            'reason' => 'Нет грузов с положительным объёмом',
+        )), $result['excluded_trips']);
+        self::assertEqualsWithDelta(130.0, (float) db()->query('SELECT total FROM invoices WHERE id = 10')->fetchColumn(), 0.001);
+        self::assertSame('sent', db()->query('SELECT status FROM invoices WHERE id = 10')->fetchColumn());
+        self::assertEqualsWithDelta(30.0, (float) db()->query('SELECT amount FROM invoice_lines WHERE invoice_id = 10 AND trip_id = 2')->fetchColumn(), 0.001);
+        self::assertSame(0, (int) db()->query("SELECT COUNT(*) FROM invoices WHERE client_id = 3 AND period = '2026-09'")->fetchColumn());
     }
 
     private function addClient(int $id, string $name): void

@@ -127,3 +127,8 @@ table.info th {
     background: #fce8e6;
     border-color: #e6b8b2;
 }
+
+.msg.warning {
+    background: #fff5d6;
+    border-color: #e8cf8d;
+}
