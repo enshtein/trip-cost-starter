@@ -131,7 +131,7 @@ final class BillingTest extends TestCase
         $firstInvoiceId = (int) db()->query("SELECT id FROM invoices WHERE client_id = 1 AND period = '2026-09'")->fetchColumn();
         db()->exec("UPDATE invoices SET status = 'sent' WHERE id = $firstInvoiceId");
 
-        self::assertSame(array('created' => 0, 'updated' => 2), billing_run_period('2026-09'));
+        self::assertSame(array('created' => 0, 'updated' => 0), billing_run_period('2026-09'));
         self::assertSame(2, (int) db()->query("SELECT COUNT(*) FROM invoice_lines WHERE invoice_id = $firstInvoiceId")->fetchColumn());
         self::assertSame('sent', db()->query("SELECT status FROM invoices WHERE id = $firstInvoiceId")->fetchColumn());
         self::assertEqualsWithDelta(75.0, (float) db()->query("SELECT total FROM invoices WHERE id = $firstInvoiceId")->fetchColumn(), 0.001);

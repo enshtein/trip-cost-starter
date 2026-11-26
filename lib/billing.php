@@ -73,50 +73,132 @@ function calc_share($trip_id)
 }
 
 /**
- * Сформировать счета клиентов за месяц.
- *
- * Для каждого клиента берутся рейсы месяца (по дате отправления, кроме отменённых) и его доля в каждом из них.
- * Если счёт за месяц уже есть, его строки пересчитываются заново.
+ * Расчётный план счетов за месяц без записи в базу.
  */
-function billing_run_period($period)
+function billing_period_plan($period)
 {
     $db = db();
-    $created = 0;
-    $updated = 0;
+    $trips_statement = $db->prepare("SELECT DISTINCT t.id FROM trips t
+        JOIN cargo c ON c.trip_id = t.id
+        WHERE c.client_id = ?
+          AND t.departure_date LIKE ?
+          AND t.status <> 'cancelled'
+        ORDER BY t.departure_date");
+    $invoice_statement = $db->prepare('SELECT id, total FROM invoices WHERE client_id = ? AND period = ?');
+    $clients = array();
+    $total_before_cents = 0;
+    $total_after_cents = 0;
+
+    foreach (get_clients() as $client) {
+        $trips_statement->execute(array($client['id'], $period . '%'));
+        $trip_ids = $trips_statement->fetchAll(PDO::FETCH_COLUMN);
+        if (!$trip_ids) {
+            continue;
+        }
+
+        $invoice_statement->execute(array($client['id'], $period));
+        $invoice = $invoice_statement->fetch();
+        $lines = array();
+        $after_cents = 0;
+        foreach ($trip_ids as $trip_id) {
+            $shares = calc_share($trip_id);
+            $amount_cents = (int)round($shares[$client['id']]['amount'] * 100);
+            $lines[] = array('trip_id' => (int)$trip_id, 'amount_cents' => $amount_cents);
+            $after_cents += $amount_cents;
+        }
+
+        $before_cents = $invoice ? (int)round((float)$invoice['total'] * 100) : 0;
+        $clients[] = array(
+            'client_id' => (int)$client['id'],
+            'name' => $client['name'],
+            'invoice_id' => $invoice ? (int)$invoice['id'] : null,
+            'before_cents' => $before_cents,
+            'after_cents' => $after_cents,
+            'lines' => $lines,
+        );
+        $total_before_cents += $before_cents;
+        $total_after_cents += $after_cents;
+    }
+
+    return array(
+        'period' => $period,
+        'clients' => $clients,
+        'total_before_cents' => $total_before_cents,
+        'total_after_cents' => $total_after_cents,
+    );
+}
+
+/**
+ * Данные предпросмотра счетов в формате API.
+ */
+function billing_preview_period($period)
+{
+    $plan = billing_period_plan($period);
+    $clients = array();
+    foreach ($plan['clients'] as $client) {
+        $clients[] = array(
+            'client_id' => $client['client_id'],
+            'name' => $client['name'],
+            'invoice_id' => $client['invoice_id'],
+            'before' => billing_format_cents($client['before_cents']),
+            'after' => billing_format_cents($client['after_cents']),
+            'diff' => billing_format_cents($client['after_cents'] - $client['before_cents']),
+        );
+    }
+
+    return array(
+        'period' => $plan['period'],
+        'clients' => $clients,
+        'total_before' => billing_format_cents($plan['total_before_cents']),
+        'total_after' => billing_format_cents($plan['total_after_cents']),
+    );
+}
+
+/**
+ * Применить расчётный план счетов за месяц.
+ */
+function billing_apply_period($period)
+{
+    $db = db();
+    $plan = billing_period_plan($period);
+    $result = array('period' => $period, 'created' => 0, 'updated' => 0, 'unchanged' => 0, 'clients' => array());
 
     $db->beginTransaction();
     try {
-        foreach (get_clients() as $client) {
-            $trips = $db->query("SELECT DISTINCT t.id FROM trips t
-                JOIN cargo c ON c.trip_id = t.id
-                WHERE c.client_id = {$client['id']}
-                  AND t.departure_date LIKE '{$period}%'
-                  AND t.status <> 'cancelled'
-                ORDER BY t.departure_date")->fetchAll(PDO::FETCH_COLUMN);
-            if (!$trips) {
-                continue;
-            }
-
-            $invoice = $db->query("SELECT * FROM invoices WHERE client_id = {$client['id']} AND period = '{$period}'")->fetch();
-            if ($invoice) {
-                $invoice_id = $invoice['id'];
-                $db->exec("DELETE FROM invoice_lines WHERE invoice_id = $invoice_id");
-                $updated++;
+        foreach ($plan['clients'] as $client) {
+            $invoice_id = $client['invoice_id'];
+            $action = 'unchanged';
+            if ($invoice_id === null) {
+                $statement = $db->prepare("INSERT INTO invoices (client_id, period, status, total, created_at)
+                    VALUES (?, ?, 'draft', ?, datetime('now', 'localtime'))");
+                $statement->execute(array($client['client_id'], $period, $client['after_cents'] / 100));
+                $invoice_id = (int)$db->lastInsertId();
+                $action = 'created';
+                $result['created']++;
+            } elseif (!billing_invoice_matches_plan($invoice_id, $client)) {
+                $db->prepare('DELETE FROM invoice_lines WHERE invoice_id = ?')->execute(array($invoice_id));
+                $db->prepare('UPDATE invoices SET total = ? WHERE id = ?')->execute(array($client['after_cents'] / 100, $invoice_id));
+                $action = 'updated';
+                $result['updated']++;
             } else {
-                $db->exec("INSERT INTO invoices (client_id, period, status, total, created_at)
-                    VALUES ({$client['id']}, '{$period}', 'draft', 0, datetime('now', 'localtime'))");
-                $invoice_id = $db->lastInsertId();
-                $created++;
+                $result['unchanged']++;
             }
 
-            $total = 0;
-            foreach ($trips as $trip_id) {
-                $shares = calc_share($trip_id);
-                $amount = $shares[$client['id']]['amount'];
-                $db->exec("INSERT INTO invoice_lines (invoice_id, trip_id, amount) VALUES ($invoice_id, $trip_id, $amount)");
-                $total += $amount;
+            if ($action !== 'unchanged') {
+                $line_statement = $db->prepare('INSERT INTO invoice_lines (invoice_id, trip_id, amount) VALUES (?, ?, ?)');
+                foreach ($client['lines'] as $line) {
+                    $line_statement->execute(array($invoice_id, $line['trip_id'], $line['amount_cents'] / 100));
+                }
             }
-            $db->exec("UPDATE invoices SET total = $total WHERE id = $invoice_id");
+
+            $result['clients'][] = array(
+                'client_id' => $client['client_id'],
+                'name' => $client['name'],
+                'invoice_id' => $invoice_id,
+                'action' => $action,
+                'before' => billing_format_cents($client['before_cents']),
+                'after' => billing_format_cents($client['after_cents']),
+            );
         }
         $db->commit();
     } catch (Throwable $exception) {
@@ -124,5 +206,47 @@ function billing_run_period($period)
         throw $exception;
     }
 
-    return array('created' => $created, 'updated' => $updated);
+    return $result;
+}
+
+/**
+ * Совпадают ли сохранённые строки и итог счёта с расчётным планом.
+ */
+function billing_invoice_matches_plan($invoice_id, $client_plan)
+{
+    $invoice_statement = db()->prepare('SELECT total FROM invoices WHERE id = ?');
+    $invoice_statement->execute(array($invoice_id));
+    $invoice = $invoice_statement->fetch();
+    if (!$invoice || (int)round((float)$invoice['total'] * 100) !== $client_plan['after_cents']) {
+        return false;
+    }
+
+    $lines_statement = db()->prepare('SELECT trip_id, amount FROM invoice_lines WHERE invoice_id = ? ORDER BY id');
+    $lines_statement->execute(array($invoice_id));
+    $lines = $lines_statement->fetchAll();
+    if (count($lines) !== count($client_plan['lines'])) {
+        return false;
+    }
+    foreach ($lines as $index => $line) {
+        $expected = $client_plan['lines'][$index];
+        if ((int)$line['trip_id'] !== $expected['trip_id'] || (int)round((float)$line['amount'] * 100) !== $expected['amount_cents']) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function billing_format_cents($cents)
+{
+    return number_format($cents / 100, 2, '.', '');
+}
+
+/**
+ * Обратная совместимость для существующей формы формирования счетов.
+ */
+function billing_run_period($period)
+{
+    $result = billing_apply_period($period);
+    return array('created' => $result['created'], 'updated' => $result['updated']);
 }
