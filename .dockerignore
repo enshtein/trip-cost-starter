@@ -1,4 +1,5 @@
 .git/
 .idea/
 data/app.sqlite
+var/log/*.log
 vendor/

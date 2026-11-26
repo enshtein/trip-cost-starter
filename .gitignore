@@ -1,5 +1,6 @@
 data/app.sqlite
 data/browser-test.sqlite
+var/log/*.log
 vendor/
 .idea/
 .phpunit.result.cache
