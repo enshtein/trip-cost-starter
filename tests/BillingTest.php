@@ -1,6 +1,7 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\TestDox;
 
 final class BillingTest extends TestCase
 {
@@ -9,6 +10,7 @@ final class BillingTest extends TestCase
         db()->exec('DELETE FROM invoice_lines; DELETE FROM invoices; DELETE FROM cargo; DELETE FROM trips; DELETE FROM clients;');
     }
 
+    #[TestDox('Стоимость рейса делится между клиентами пропорционально общему весу')]
     public function testCalcShareSplitsCostByTotalClientWeight(): void
     {
         $this->addClient(1, 'Клиент А');
@@ -27,6 +29,7 @@ final class BillingTest extends TestCase
         self::assertEqualsWithDelta(700.70, $shares[2]['amount'], 0.001);
     }
 
+    #[TestDox('При нулевом общем весе начисления равны нулю')]
     public function testCalcShareReturnsZeroAmountsWhenTotalWeightIsZero(): void
     {
         $this->addClient(1, 'Клиент А');
@@ -43,6 +46,7 @@ final class BillingTest extends TestCase
         self::assertEqualsWithDelta(0.0, $shares[2]['amount'], 0.001);
     }
 
+    #[TestDox('Счета создаются только по подходящим рейсам и пересчитываются без дублирования')]
     public function testBillingCreatesInvoicesOnlyForEligibleTripsAndRecalculatesThem(): void
     {
         $this->addClient(1, 'Клиент А');

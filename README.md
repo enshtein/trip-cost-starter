@@ -34,6 +34,12 @@ composer test
 Тесты используют отдельную временную SQLite-базу и не изменяют
 `data/app.sqlite`.
 
+Чтобы увидеть названия выполненных сценариев, запустите:
+
+```bash
+composer test -- --testdox
+```
+
 `php bin/reset-db.php` пересоздаёт базу `data/app.sqlite` из `data/schema.sql` и `data/seed.sql`. Так можно вернуть
 исходные данные в любой момент.
 
