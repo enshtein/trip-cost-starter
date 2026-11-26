@@ -1,3 +1,4 @@
+// Загружает доли рейса только из API и отображает ответ в таблице карточки.
 $(function () {
     var $table = $('#trip-split');
     var $tbody = $table.find('tbody');
@@ -5,6 +6,7 @@ $(function () {
     var $clientsTotal = $table.find('[data-role="clients-total"]');
     var $tripCost = $table.find('[data-role="trip-cost"]');
 
+    // Очищает итоги, чтобы ошибочные данные нельзя было принять за расчёт.
     function showError(message) {
         $tbody.html('<tr><td colspan="6" class="empty">Распределение недоступно</td></tr>');
         $clientsTotal.text('—');

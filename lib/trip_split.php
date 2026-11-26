@@ -3,6 +3,10 @@
 /**
  * Данные рейса и долей клиентов для API.
  * Возвращает null, если рейс не найден.
+ *
+ * @param int $trip_id
+ * @return array<string, mixed>|null
+ * @throws DomainException
  */
 function trip_split_data($trip_id)
 {

@@ -1,25 +1,30 @@
 <?php
 
+/** @param mixed $s @return string */
 function h($s)
 {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 
+/** @param mixed $x @return string */
 function money($x)
 {
     return number_format((float)$x, 2, ',', ' ');
 }
 
+/** @param mixed $x @return string */
 function num($x, $decimals = 0)
 {
     return number_format((float)$x, $decimals, ',', ' ');
 }
 
+/** @return array<int, array<string, mixed>> */
 function get_clients()
 {
     return db()->query("SELECT * FROM clients ORDER BY name")->fetchAll();
 }
 
+/** @param string $status @return string */
 function trip_status_name($status)
 {
     $names = array(
@@ -31,6 +36,7 @@ function trip_status_name($status)
     return isset($names[$status]) ? $names[$status] : $status;
 }
 
+/** @param string $status @return string */
 function invoice_status_name($status)
 {
     $names = array(
@@ -40,6 +46,7 @@ function invoice_status_name($status)
     return isset($names[$status]) ? $names[$status] : $status;
 }
 
+/** @param string|null $dt @return string */
 function format_dt($dt)
 {
     if (!$dt) {
@@ -48,6 +55,13 @@ function format_dt($dt)
     return date('d.m.Y H:i', strtotime($dt));
 }
 
+/**
+ * Завершает HTTP-ответ JSON-данными.
+ *
+ * @param mixed $data
+ * @param int $code
+ * @return never
+ */
 function json_out($data, $code = 200)
 {
     http_response_code($code);
@@ -56,6 +70,12 @@ function json_out($data, $code = 200)
     exit;
 }
 
+/**
+ * Выводит начало HTML-страницы и общее меню.
+ *
+ * @param string $title
+ * @return void
+ */
 function page_header($title)
 {
     $menu = array(
@@ -79,6 +99,7 @@ function page_header($title)
     echo '</div><div class="page">';
 }
 
+/** @return void */
 function page_footer()
 {
     echo '</div></body></html>';

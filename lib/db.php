@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Возвращает единственное подключение к рабочей SQLite-базе.
+ *
+ * @return PDO
+ */
 function db()
 {
     static $pdo = null;

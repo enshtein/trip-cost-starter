@@ -8,6 +8,10 @@
  * округления распределяется по наибольшим дробным частям, затем по ID клиента.
  * Возвращает [client_id => [name, weight_kg, volume_m3, share, amount]],
  * где share — доля от 0 до 1.
+ *
+ * @param int $trip_id
+ * @return array<int, array{name: string, cargo_count: int, weight_kg: float, volume_m3: float, share: float, amount: float}>
+ * @throws DomainException Если рейс нельзя распределить по объёму.
  */
 function calc_share($trip_id)
 {
@@ -74,6 +78,9 @@ function calc_share($trip_id)
 
 /**
  * Расчётный план счетов за месяц без записи в базу.
+ *
+ * @param string $period Месяц в формате ГГГГ-ММ.
+ * @return array<string, mixed>
  */
 function billing_period_plan($period)
 {
@@ -158,6 +165,9 @@ function billing_period_plan($period)
  * существующие строки счёта сохраняются, а новый счёт только ради него не
  * создаётся. Это не скрывает ошибку отрицательного объёма — она по-прежнему
  * прерывает расчёт в calc_share().
+ *
+ * @param string $period Месяц в формате ГГГГ-ММ.
+ * @return array{excluded_ids: array<int, int>, excluded_trips: array<int, array<string, mixed>>}
  */
 function billing_eligible_trips($period)
 {
@@ -187,6 +197,9 @@ function billing_eligible_trips($period)
 
 /**
  * Данные предпросмотра счетов в формате API.
+ *
+ * @param string $period
+ * @return array<string, mixed>
  */
 function billing_preview_period($period)
 {
@@ -214,6 +227,9 @@ function billing_preview_period($period)
 
 /**
  * Применить расчётный план счетов за месяц.
+ *
+ * @param string $period
+ * @return array<string, mixed>
  */
 function billing_apply_period($period)
 {
@@ -276,6 +292,10 @@ function billing_apply_period($period)
 
 /**
  * Совпадают ли сохранённые строки и итог счёта с расчётным планом.
+ *
+ * @param int $invoice_id
+ * @param array<string, mixed> $client_plan
+ * @return bool
  */
 function billing_invoice_matches_plan($invoice_id, $client_plan)
 {
@@ -302,6 +322,7 @@ function billing_invoice_matches_plan($invoice_id, $client_plan)
     return true;
 }
 
+/** @param int $cents @return string */
 function billing_format_cents($cents)
 {
     return number_format($cents / 100, 2, '.', '');
@@ -309,6 +330,9 @@ function billing_format_cents($cents)
 
 /**
  * Обратная совместимость для существующей формы формирования счетов.
+ *
+ * @param string $period
+ * @return array{created: int, updated: int}
  */
 function billing_run_period($period)
 {

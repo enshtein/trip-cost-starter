@@ -2,6 +2,8 @@
 
 /**
  * Счета, которые нужно передать в 1С: отправленные и ещё не выгруженные.
+ *
+ * @return array<int, array<string, mixed>>
  */
 function export_1c_invoices()
 {
@@ -14,6 +16,9 @@ function export_1c_invoices()
 
 /**
  * Строки счёта для выгрузки в 1С в порядке их создания.
+ *
+ * @param int $invoice_id
+ * @return array<int, array<string, mixed>>
  */
 function export_1c_invoice_lines($invoice_id)
 {
@@ -27,6 +32,9 @@ function export_1c_invoice_lines($invoice_id)
 
 /**
  * Отметить переданные в 1С счета. Возвращает количество обновлённых счетов.
+ *
+ * @param array<int, int|string> $invoice_ids
+ * @return int
  */
 function mark_invoices_exported($invoice_ids)
 {

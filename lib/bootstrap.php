@@ -7,11 +7,13 @@ ini_set('display_startup_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', dirname(__DIR__) . '/var/log/app.log');
 
+/** @return bool */
 function app_is_api_request()
 {
     return strpos($_SERVER['SCRIPT_NAME'] ?? '', '/api/') !== false;
 }
 
+/** Выводит нейтральный ответ 500 для страницы или API. @return void */
 function app_unexpected_error_response()
 {
     if (headers_sent()) {

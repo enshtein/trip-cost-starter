@@ -1,3 +1,4 @@
+// Двухшаговый пересчёт: предпросмотр по API, затем подтверждённое применение.
 $(function () {
     var $form = $('#billing-form');
     var $period = $('#billing-period');
@@ -9,6 +10,7 @@ $(function () {
     var $apply = $('#billing-apply');
     var preview = null;
 
+    // Показывает успешный результат или ошибку без перезагрузки страницы.
     function showMessage(text, isError) {
         $message.text(text).toggleClass('error', Boolean(isError)).prop('hidden', false);
     }
@@ -18,6 +20,7 @@ $(function () {
         return (amount > 0 ? '+' : '') + money(amount);
     }
 
+    // Отрисовывает предпросмотр и отдельно сообщает об исключённых рейсах.
     function render(data) {
         $tbody.empty();
         $.each(data.clients, function (index, client) {
@@ -48,6 +51,7 @@ $(function () {
         $apply.prop('disabled', !data.clients.length);
     }
 
+    // По умолчанию скрывает прежнее сообщение; после применения сохраняет его.
     function loadPreview(keepMessage) {
         if (!keepMessage) {
             $message.prop('hidden', true);
