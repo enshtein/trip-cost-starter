@@ -5,7 +5,7 @@ function db()
     static $pdo = null;
 
     if ($pdo === null) {
-        $file = __DIR__ . '/../data/app.sqlite';
+        $file = getenv('APP_DB_FILE') ?: __DIR__ . '/../data/app.sqlite';
         if (!file_exists($file)) {
             die('База не создана. Запустите: php bin/reset-db.php');
         }

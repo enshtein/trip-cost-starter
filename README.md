@@ -22,6 +22,18 @@ docker run --rm -p 8000:8000 trip-cost-starter
 
 При каждом запуске контейнера база пересоздаётся из схемы и тестовых данных.
 
+## Тесты
+
+Установить зависимости и запустить тесты бизнес-логики:
+
+```bash
+composer install
+composer test
+```
+
+Тесты используют отдельную временную SQLite-базу и не изменяют
+`data/app.sqlite`.
+
 `php bin/reset-db.php` пересоздаёт базу `data/app.sqlite` из `data/schema.sql` и `data/seed.sql`. Так можно вернуть
 исходные данные в любой момент.
 
