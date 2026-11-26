@@ -13,6 +13,10 @@ function calc_share($trip_id)
 {
     $trip_id = (int)$trip_id;
     $trip = db()->query("SELECT cost FROM trips WHERE id = $trip_id")->fetch();
+    $invalid_volume_count = (int)db()->query("SELECT COUNT(*) FROM cargo WHERE trip_id = $trip_id AND volume_m3 < 0")->fetchColumn();
+    if ($invalid_volume_count > 0) {
+        throw new DomainException('Невозможно распределить стоимость рейса: объём груза не может быть отрицательным.');
+    }
     $rows = db()->query("SELECT c.client_id, cl.name, SUM(c.weight_kg) AS weight_kg,
             SUM(COALESCE(c.volume_m3, 0)) AS volume_m3
         FROM cargo c

@@ -92,6 +92,18 @@ final class BillingTest extends TestCase
         self::assertEqualsWithDelta(100.00, array_sum(array_column($shares, 'amount')), 0.001);
     }
 
+    #[TestDox('Расчёт прекращается при отрицательном объёме груза')]
+    public function testCalcShareFailsWhenCargoHasNegativeVolume(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addTrip(1, '2026-09-01 10:00', 100.00);
+        $this->addCargo(1, 1, 1, 10, -1);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('не может быть отрицательным');
+        calc_share(1);
+    }
+
     #[TestDox('Счета создаются только по подходящим рейсам и пересчитываются без дублирования')]
     public function testBillingCreatesInvoicesOnlyForEligibleTripsAndRecalculatesThem(): void
     {
@@ -123,6 +135,23 @@ final class BillingTest extends TestCase
         self::assertSame(2, (int) db()->query("SELECT COUNT(*) FROM invoice_lines WHERE invoice_id = $firstInvoiceId")->fetchColumn());
         self::assertSame('sent', db()->query("SELECT status FROM invoices WHERE id = $firstInvoiceId")->fetchColumn());
         self::assertEqualsWithDelta(75.0, (float) db()->query("SELECT total FROM invoices WHERE id = $firstInvoiceId")->fetchColumn(), 0.001);
+    }
+
+    #[TestDox('Сумма строк счетов по рейсу совпадает со стоимостью до копейки')]
+    public function testBillingKeepsTripCostExactInInvoiceLines(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addClient(2, 'Клиент Б');
+        $this->addClient(3, 'Клиент В');
+        $this->addTrip(1, '2026-09-01 10:00', 100.00);
+        $this->addCargo(1, 1, 1, 10, 1);
+        $this->addCargo(2, 1, 2, 10, 1);
+        $this->addCargo(3, 1, 3, 10, 1);
+
+        billing_run_period('2026-09');
+
+        self::assertEqualsWithDelta(100.00, (float) db()->query('SELECT SUM(amount) FROM invoice_lines WHERE trip_id = 1')->fetchColumn(), 0.001);
+        self::assertEqualsWithDelta(33.34, (float) db()->query("SELECT total FROM invoices WHERE client_id = 1 AND period = '2026-09'")->fetchColumn(), 0.001);
     }
 
     #[TestDox('Пересчёт счета заменяет начисления и сохраняет служебные даты')]

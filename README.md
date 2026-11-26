@@ -42,6 +42,8 @@ composer test
 composer test -- --testdox
 ```
 
+Подробные правила расчёта и порядок ручной проверки: [docs/business-logic.md](docs/business-logic.md).
+
 `php bin/reset-db.php` пересоздаёт базу `data/app.sqlite` из `data/schema.sql` и `data/seed.sql`. Так можно вернуть
 исходные данные в любой момент.
 
