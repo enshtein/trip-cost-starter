@@ -122,3 +122,8 @@ table.info th {
     padding: 8px 12px;
     margin-bottom: 12px;
 }
+
+.msg.error {
+    background: #fce8e6;
+    border-color: #e6b8b2;
+}
