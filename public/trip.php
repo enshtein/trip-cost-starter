@@ -44,7 +44,7 @@ page_header('Рейс ' . $trip['number']);
     <tr>
         <th>Клиент</th>
         <th>Груз</th>
-        <th class="r">Объём, м³</th>
+        <th class="r">Вес, кг</th>
         <th class="r">Объём, м³</th>
         <th class="r">Паллет</th>
     </tr>
@@ -70,7 +70,7 @@ page_header('Рейс ' . $trip['number']);
     <thead>
     <tr>
         <th>Клиент</th>
-        <th class="r">Вес, кг</th>
+        <th class="r">Объём, м³</th>
         <th class="r">Доля, %</th>
         <th class="r">Сумма, ₽</th>
     </tr>
