@@ -13,12 +13,14 @@ php -S localhost:8000 -t public
 
 Открыть http://localhost:8000.
 
-То же через Docker:
+Через Docker (используется PHP 8.2):
 
 ```bash
-docker run --rm -it -p 8000:8000 -v "$PWD":/app -w /app php:8.4-cli \
-    sh -c "php bin/reset-db.php && php -S 0.0.0.0:8000 -t public"
+docker build -t trip-cost-starter .
+docker run --rm -p 8000:8000 trip-cost-starter
 ```
+
+При каждом запуске контейнера база пересоздаётся из схемы и тестовых данных.
 
 `php bin/reset-db.php` пересоздаёт базу `data/app.sqlite` из `data/schema.sql` и `data/seed.sql`. Так можно вернуть
 исходные данные в любой момент.
