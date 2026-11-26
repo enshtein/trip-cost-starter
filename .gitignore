@@ -1,3 +1,4 @@
 data/app.sqlite
 vendor/
 .idea/
+.phpunit.result.cache
