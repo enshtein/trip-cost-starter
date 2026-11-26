@@ -33,7 +33,7 @@ page_header('Загрузка машин');
         <th>Машина</th>
         <th class="r">Грузоподъёмность, кг</th>
         <th class="r">Вес, кг</th>
-        <th class="r">Загрузка, %</th>
+        <th class="r">Загрузка / доля стоимости, %</th>
     </tr>
     </thead>
     <tbody>
