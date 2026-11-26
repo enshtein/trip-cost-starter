@@ -17,7 +17,7 @@ function calc_share($trip_id)
     if ($invalid_volume_count > 0) {
         throw new DomainException('Невозможно распределить стоимость рейса: объём груза не может быть отрицательным.');
     }
-    $rows = db()->query("SELECT c.client_id, cl.name, SUM(c.weight_kg) AS weight_kg,
+    $rows = db()->query("SELECT c.client_id, cl.name, COUNT(*) AS cargo_count, SUM(c.weight_kg) AS weight_kg,
             SUM(COALESCE(c.volume_m3, 0)) AS volume_m3
         FROM cargo c
         JOIN clients cl ON cl.id = c.client_id
@@ -61,6 +61,7 @@ function calc_share($trip_id)
         $share = $volume > 0 ? $volume / $total_volume : 0;
         $result[$row['client_id']] = array(
             'name' => $row['name'],
+            'cargo_count' => (int)$row['cargo_count'],
             'weight_kg' => $row['weight_kg'],
             'volume_m3' => $row['volume_m3'],
             'share' => $share,
