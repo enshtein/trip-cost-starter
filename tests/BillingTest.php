@@ -46,6 +46,14 @@ final class BillingTest extends TestCase
         self::assertEqualsWithDelta(0.0, $shares[2]['amount'], 0.001);
     }
 
+    #[TestDox('Рейс без грузов не создаёт долей')]
+    public function testCalcShareReturnsNoSharesForTripWithoutCargo(): void
+    {
+        $this->addTrip(1, '2026-09-01 10:00', 1000.00);
+
+        self::assertSame(array(), calc_share(1));
+    }
+
     #[TestDox('Счета создаются только по подходящим рейсам и пересчитываются без дублирования')]
     public function testBillingCreatesInvoicesOnlyForEligibleTripsAndRecalculatesThem(): void
     {
@@ -77,6 +85,39 @@ final class BillingTest extends TestCase
         self::assertSame(2, (int) db()->query("SELECT COUNT(*) FROM invoice_lines WHERE invoice_id = $firstInvoiceId")->fetchColumn());
         self::assertSame('sent', db()->query("SELECT status FROM invoices WHERE id = $firstInvoiceId")->fetchColumn());
         self::assertEqualsWithDelta(75.0, (float) db()->query("SELECT total FROM invoices WHERE id = $firstInvoiceId")->fetchColumn(), 0.001);
+    }
+
+    #[TestDox('Пересчёт счета заменяет начисления и сохраняет служебные даты')]
+    public function testBillingRecalculatesChangedAmountsAndPreservesInvoiceDates(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addTrip(1, '2026-09-01 10:00', 100.00);
+        $this->addCargo(1, 1, 1, 10);
+        billing_run_period('2026-09');
+
+        $invoiceId = (int) db()->query("SELECT id FROM invoices WHERE client_id = 1 AND period = '2026-09'")->fetchColumn();
+        db()->exec("UPDATE invoices SET status = 'sent', sent_at = '2026-10-01 09:00', exported_at = '2026-10-02 10:00' WHERE id = $invoiceId");
+        db()->exec('UPDATE trips SET cost = 175.55 WHERE id = 1');
+
+        self::assertSame(array('created' => 0, 'updated' => 1), billing_run_period('2026-09'));
+
+        $invoice = db()->query("SELECT status, sent_at, exported_at, total FROM invoices WHERE id = $invoiceId")->fetch();
+        self::assertSame('sent', $invoice['status']);
+        self::assertSame('2026-10-01 09:00', $invoice['sent_at']);
+        self::assertSame('2026-10-02 10:00', $invoice['exported_at']);
+        self::assertEqualsWithDelta(175.55, (float)$invoice['total'], 0.001);
+        self::assertEqualsWithDelta(175.55, (float) db()->query("SELECT amount FROM invoice_lines WHERE invoice_id = $invoiceId")->fetchColumn(), 0.001);
+    }
+
+    #[TestDox('Месяц без подходящих рейсов не создаёт счета')]
+    public function testBillingDoesNotCreateInvoicesWhenThereAreNoEligibleTrips(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addTrip(1, '2026-10-01 10:00', 100.00);
+        $this->addCargo(1, 1, 1, 10);
+
+        self::assertSame(array('created' => 0, 'updated' => 0), billing_run_period('2026-09'));
+        self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
     }
 
     private function addClient(int $id, string $name): void

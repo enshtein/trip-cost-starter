@@ -3,12 +3,7 @@
 // Формат файла согласован с бухгалтерией: его разбирает обработка загрузки счетов в 1С. Не менять без согласования.
 require __DIR__ . '/../lib/bootstrap.php';
 
-$db = db();
-$invoices = $db->query("SELECT i.*, cl.name AS client_name, cl.inn
-    FROM invoices i
-    JOIN clients cl ON cl.id = i.client_id
-    WHERE i.status = 'sent' AND i.exported_at IS NULL
-    ORDER BY i.id")->fetchAll();
+$invoices = export_1c_invoices();
 
 header('Content-Type: text/csv; charset=utf-8');
 header('Content-Disposition: attachment; filename="invoices_' . date('Ymd_His') . '.csv"');
@@ -19,11 +14,7 @@ fputcsv($out, array('invoice', 'inn', 'client', 'period', 'trip', 'amount'), ';'
 
 $ids = array();
 foreach ($invoices as $invoice) {
-    $lines = $db->query("SELECT l.amount, t.number
-        FROM invoice_lines l
-        JOIN trips t ON t.id = l.trip_id
-        WHERE l.invoice_id = {$invoice['id']}
-        ORDER BY l.id")->fetchAll();
+    $lines = export_1c_invoice_lines($invoice['id']);
     foreach ($lines as $line) {
         fputcsv($out, array(
             $invoice['id'],
@@ -38,6 +29,4 @@ foreach ($invoices as $invoice) {
 }
 fclose($out);
 
-if ($ids) {
-    $db->exec("UPDATE invoices SET exported_at = datetime('now', 'localtime') WHERE id IN (" . implode(',', $ids) . ")");
-}
+mark_invoices_exported($ids);
