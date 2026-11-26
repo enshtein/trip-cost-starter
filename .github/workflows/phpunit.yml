@@ -1,0 +1,27 @@
+name: PHPUnit
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: PHPUnit на PHP 8.2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+
+      - name: Настроить PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite
+          coverage: none
+
+      - name: Установить зависимости Composer
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Запустить PHPUnit
+        run: composer test
