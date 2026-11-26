@@ -14,7 +14,13 @@ $cargo = db()->query("SELECT c.*, cl.name AS client_name
     WHERE c.trip_id = $id
     ORDER BY cl.name, c.id")->fetchAll();
 
-$shares = calc_share($id);
+$share_error = null;
+try {
+    $shares = calc_share($id);
+} catch (DomainException $exception) {
+    $shares = array();
+    $share_error = $exception->getMessage();
+}
 $shares_total = 0;
 foreach ($shares as $share) {
     $shares_total += $share['amount'];
@@ -38,7 +44,7 @@ page_header('Рейс ' . $trip['number']);
     <tr>
         <th>Клиент</th>
         <th>Груз</th>
-        <th class="r">Вес, кг</th>
+        <th class="r">Объём, м³</th>
         <th class="r">Объём, м³</th>
         <th class="r">Паллет</th>
     </tr>
@@ -73,7 +79,7 @@ page_header('Рейс ' . $trip['number']);
     <?php foreach ($shares as $share): ?>
         <tr>
             <td><?= h($share['name']) ?></td>
-            <td class="r"><?= num($share['weight_kg']) ?></td>
+            <td class="r"><?= num($share['volume_m3'], 1) ?></td>
             <td class="r"><?= num($share['share'] * 100, 1) ?></td>
             <td class="r"><?= money($share['amount']) ?></td>
         </tr>
@@ -84,4 +90,7 @@ page_header('Рейс ' . $trip['number']);
     </tr>
     </tbody>
 </table>
+<?php if ($share_error): ?>
+    <div class="msg"><?= h($share_error) ?></div>
+<?php endif; ?>
 <?php page_footer();

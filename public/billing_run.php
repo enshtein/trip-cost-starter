@@ -6,7 +6,12 @@ if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
     die('Неверный месяц');
 }
 
-$result = billing_run_period($period);
+try {
+    $result = billing_run_period($period);
+} catch (DomainException $exception) {
+    header('Location: invoices.php?period=' . urlencode($period) . '&msg=' . urlencode($exception->getMessage()));
+    exit;
+}
 
 $msg = 'Счета за ' . $period . ': создано ' . $result['created'] . ', обновлено ' . $result['updated'];
 header('Location: invoices.php?period=' . urlencode($period) . '&msg=' . urlencode($msg));

@@ -40,7 +40,13 @@ page_header('Загрузка машин');
     <?php foreach ($trips as $trip): ?>
         <?php
         $load = $trip['capacity_kg'] ? $trip['weight_kg'] / $trip['capacity_kg'] * 100 : 0;
-        $shares = calc_share($trip['id']);
+        $share_error = null;
+        try {
+            $shares = calc_share($trip['id']);
+        } catch (DomainException $exception) {
+            $shares = array();
+            $share_error = $exception->getMessage();
+        }
         uasort($shares, function ($a, $b) {
             return $b['share'] <=> $a['share'];
         });
@@ -61,6 +67,9 @@ page_header('Загрузка машин');
                 <td class="r"><?= num($share['share'] * 100, 1) ?></td>
             </tr>
         <?php endforeach; ?>
+        <?php if ($share_error): ?>
+            <tr class="sub"><td colspan="6"><?= h($share_error) ?></td></tr>
+        <?php endif; ?>
     <?php endforeach; ?>
     <?php if (!$trips): ?>
         <tr><td colspan="6" class="empty">Рейсов нет</td></tr>

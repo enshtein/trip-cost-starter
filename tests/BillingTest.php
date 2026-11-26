@@ -10,48 +10,86 @@ final class BillingTest extends TestCase
         db()->exec('DELETE FROM invoice_lines; DELETE FROM invoices; DELETE FROM cargo; DELETE FROM trips; DELETE FROM clients;');
     }
 
-    #[TestDox('Стоимость рейса делится между клиентами пропорционально общему весу')]
-    public function testCalcShareSplitsCostByTotalClientWeight(): void
+    #[TestDox('Стоимость рейса делится между клиентами пропорционально общему объёму')]
+    public function testCalcShareSplitsCostByTotalClientVolume(): void
     {
         $this->addClient(1, 'Клиент А');
         $this->addClient(2, 'Клиент Б');
         $this->addTrip(1, '2026-09-01 10:00', 1001.00);
-        $this->addCargo(1, 1, 1, 100);
-        $this->addCargo(2, 1, 1, 200);
-        $this->addCargo(3, 1, 2, 700);
+        $this->addCargo(1, 1, 1, 1000, 1);
+        $this->addCargo(2, 1, 1, 2000, 2);
+        $this->addCargo(3, 1, 2, 100, 7);
 
         $shares = calc_share(1);
 
-        self::assertEqualsWithDelta(300, $shares[1]['weight_kg'], 0.001);
+        self::assertEqualsWithDelta(3, $shares[1]['volume_m3'], 0.001);
         self::assertEqualsWithDelta(0.3, $shares[1]['share'], 0.00001);
         self::assertEqualsWithDelta(300.30, $shares[1]['amount'], 0.001);
         self::assertEqualsWithDelta(0.7, $shares[2]['share'], 0.00001);
         self::assertEqualsWithDelta(700.70, $shares[2]['amount'], 0.001);
     }
 
-    #[TestDox('При нулевом общем весе начисления равны нулю')]
-    public function testCalcShareReturnsZeroAmountsWhenTotalWeightIsZero(): void
+    #[TestDox('Расчёт прекращается, если в рейсе нет положительного объёма')]
+    public function testCalcShareFailsWhenTripHasNoPositiveVolume(): void
     {
         $this->addClient(1, 'Клиент А');
         $this->addClient(2, 'Клиент Б');
         $this->addTrip(1, '2026-09-01 10:00', 1000.00);
-        $this->addCargo(1, 1, 1, 0);
-        $this->addCargo(2, 1, 2, 0);
+        $this->addCargo(1, 1, 1, 100, null);
+        $this->addCargo(2, 1, 2, 100, 0);
 
-        $shares = calc_share(1);
-
-        self::assertSame(0, $shares[1]['share']);
-        self::assertEqualsWithDelta(0.0, $shares[1]['amount'], 0.001);
-        self::assertSame(0, $shares[2]['share']);
-        self::assertEqualsWithDelta(0.0, $shares[2]['amount'], 0.001);
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('не указан положительный объём');
+        calc_share(1);
     }
 
-    #[TestDox('Рейс без грузов не создаёт долей')]
-    public function testCalcShareReturnsNoSharesForTripWithoutCargo(): void
+    #[TestDox('Расчёт прекращается для рейса без грузов')]
+    public function testCalcShareFailsForTripWithoutCargo(): void
     {
         $this->addTrip(1, '2026-09-01 10:00', 1000.00);
 
-        self::assertSame(array(), calc_share(1));
+        $this->expectException(DomainException::class);
+        calc_share(1);
+    }
+
+    #[TestDox('Остаточные копейки распределяются точно и одинаково при повторном расчёте')]
+    public function testCalcShareDistributesRoundingCentsDeterministically(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addClient(2, 'Клиент Б');
+        $this->addClient(3, 'Клиент В');
+        $this->addTrip(1, '2026-09-01 10:00', 100.00);
+        $this->addCargo(1, 1, 1, 10, 1);
+        $this->addCargo(2, 1, 2, 10, 1);
+        $this->addCargo(3, 1, 3, 10, 1);
+
+        $firstCalculation = calc_share(1);
+        $secondCalculation = calc_share(1);
+
+        self::assertSame($firstCalculation, $secondCalculation);
+        self::assertEqualsWithDelta(33.34, $firstCalculation[1]['amount'], 0.001);
+        self::assertEqualsWithDelta(33.33, $firstCalculation[2]['amount'], 0.001);
+        self::assertEqualsWithDelta(33.33, $firstCalculation[3]['amount'], 0.001);
+        self::assertEqualsWithDelta(100.00, array_sum(array_column($firstCalculation, 'amount')), 0.001);
+    }
+
+    #[TestDox('Грузы без объёма получают нулевую долю, а стоимость распределяется полностью')]
+    public function testCalcShareExcludesZeroAndMissingVolumeFromDistribution(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addClient(2, 'Клиент Б');
+        $this->addClient(3, 'Клиент В');
+        $this->addTrip(1, '2026-09-01 10:00', 100.00);
+        $this->addCargo(1, 1, 1, 100, 2);
+        $this->addCargo(2, 1, 2, 100, 0);
+        $this->addCargo(3, 1, 3, 100, null);
+
+        $shares = calc_share(1);
+
+        self::assertEqualsWithDelta(100.00, $shares[1]['amount'], 0.001);
+        self::assertEqualsWithDelta(0.00, $shares[2]['amount'], 0.001);
+        self::assertEqualsWithDelta(0.00, $shares[3]['amount'], 0.001);
+        self::assertEqualsWithDelta(100.00, array_sum(array_column($shares, 'amount')), 0.001);
     }
 
     #[TestDox('Счета создаются только по подходящим рейсам и пересчитываются без дублирования')]
@@ -64,11 +102,11 @@ final class BillingTest extends TestCase
         $this->addTrip(2, '2026-09-15 10:00', 50.00);
         $this->addTrip(3, '2026-09-20 10:00', 500.00, 'cancelled');
         $this->addTrip(4, '2026-10-01 10:00', 200.00);
-        $this->addCargo(1, 1, 1, 10);
-        $this->addCargo(2, 1, 2, 30);
-        $this->addCargo(3, 2, 1, 10);
-        $this->addCargo(4, 3, 3, 10);
-        $this->addCargo(5, 4, 1, 10);
+        $this->addCargo(1, 1, 1, 10, 1);
+        $this->addCargo(2, 1, 2, 30, 3);
+        $this->addCargo(3, 2, 1, 10, 1);
+        $this->addCargo(4, 3, 3, 10, 1);
+        $this->addCargo(5, 4, 1, 10, 1);
 
         self::assertSame(array('created' => 2, 'updated' => 0), billing_run_period('2026-09'));
 
@@ -92,7 +130,7 @@ final class BillingTest extends TestCase
     {
         $this->addClient(1, 'Клиент А');
         $this->addTrip(1, '2026-09-01 10:00', 100.00);
-        $this->addCargo(1, 1, 1, 10);
+        $this->addCargo(1, 1, 1, 10, 1);
         billing_run_period('2026-09');
 
         $invoiceId = (int) db()->query("SELECT id FROM invoices WHERE client_id = 1 AND period = '2026-09'")->fetchColumn();
@@ -114,10 +152,29 @@ final class BillingTest extends TestCase
     {
         $this->addClient(1, 'Клиент А');
         $this->addTrip(1, '2026-10-01 10:00', 100.00);
-        $this->addCargo(1, 1, 1, 10);
+        $this->addCargo(1, 1, 1, 10, 1);
 
         self::assertSame(array('created' => 0, 'updated' => 0), billing_run_period('2026-09'));
         self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
+    }
+
+    #[TestDox('Ошибка объёма откатывает формирование всех счетов за месяц')]
+    public function testBillingRollsBackAllInvoicesWhenTripHasNoPositiveVolume(): void
+    {
+        $this->addClient(1, 'Клиент А');
+        $this->addClient(2, 'Клиент Б');
+        $this->addTrip(1, '2026-09-01 10:00', 100.00);
+        $this->addTrip(2, '2026-09-02 10:00', 200.00);
+        $this->addCargo(1, 1, 1, 10, 1);
+        $this->addCargo(2, 2, 2, 10, null);
+
+        $this->expectException(DomainException::class);
+        try {
+            billing_run_period('2026-09');
+        } finally {
+            self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoices')->fetchColumn());
+            self::assertSame(0, (int) db()->query('SELECT COUNT(*) FROM invoice_lines')->fetchColumn());
+        }
     }
 
     private function addClient(int $id, string $name): void
@@ -132,9 +189,9 @@ final class BillingTest extends TestCase
         $statement->execute(array($id, 'РЕЙС-' . $id, $departureDate, $cost, $status));
     }
 
-    private function addCargo(int $id, int $tripId, int $clientId, float $weight): void
+    private function addCargo(int $id, int $tripId, int $clientId, float $weight, ?float $volume): void
     {
-        $statement = db()->prepare('INSERT INTO cargo (id, trip_id, client_id, weight_kg) VALUES (?, ?, ?, ?)');
-        $statement->execute(array($id, $tripId, $clientId, $weight));
+        $statement = db()->prepare('INSERT INTO cargo (id, trip_id, client_id, weight_kg, volume_m3) VALUES (?, ?, ?, ?, ?)');
+        $statement->execute(array($id, $tripId, $clientId, $weight, $volume));
     }
 }
