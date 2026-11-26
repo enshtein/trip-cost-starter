@@ -45,6 +45,13 @@ final class TripSplitTest extends TestCase
                 'amount' => '9750.10',
             ),
         ), $data['clients']);
+        self::assertEqualsWithDelta(
+            (float)$data['cost'],
+            array_sum(array_map(function ($client) {
+                return (float)$client['amount'];
+            }, $data['clients'])),
+            0.001
+        );
     }
 
     #[TestDox('API-данные отсутствуют для несуществующего рейса')]

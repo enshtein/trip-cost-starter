@@ -14,18 +14,6 @@ $cargo = db()->query("SELECT c.*, cl.name AS client_name
     WHERE c.trip_id = $id
     ORDER BY cl.name, c.id")->fetchAll();
 
-$share_error = null;
-try {
-    $shares = calc_share($id);
-} catch (DomainException $exception) {
-    $shares = array();
-    $share_error = $exception->getMessage();
-}
-$shares_total = 0;
-foreach ($shares as $share) {
-    $shares_total += $share['amount'];
-}
-
 page_header('Рейс ' . $trip['number']);
 ?>
 <p><a href="index.php">← Рейсы</a></p>
@@ -65,32 +53,32 @@ page_header('Рейс ' . $trip['number']);
     </tbody>
 </table>
 
-<h2>Доли клиентов</h2>
-<table class="grid">
+<h2>Распределение стоимости</h2>
+<div id="trip-split-message" class="msg" hidden></div>
+<table id="trip-split" class="grid" data-trip-id="<?= $trip['id'] ?>">
     <thead>
     <tr>
         <th>Клиент</th>
+        <th class="r">Грузов</th>
+        <th class="r">Вес, кг</th>
         <th class="r">Объём, м³</th>
         <th class="r">Доля, %</th>
         <th class="r">Сумма, ₽</th>
     </tr>
     </thead>
     <tbody>
-    <?php foreach ($shares as $share): ?>
-        <tr>
-            <td><?= h($share['name']) ?></td>
-            <td class="r"><?= num($share['volume_m3'], 1) ?></td>
-            <td class="r"><?= num($share['share'] * 100, 1) ?></td>
-            <td class="r"><?= money($share['amount']) ?></td>
-        </tr>
-    <?php endforeach; ?>
-    <tr class="total">
-        <td colspan="3">Итого</td>
-        <td class="r"><?= money($shares_total) ?></td>
-    </tr>
+        <tr><td colspan="6" class="empty">Загрузка распределения…</td></tr>
     </tbody>
+    <tfoot>
+        <tr class="total">
+            <td colspan="5">Итого по клиентам</td>
+            <td class="r" data-role="clients-total">—</td>
+        </tr>
+        <tr class="total">
+            <td colspan="5">Стоимость рейса</td>
+            <td class="r" data-role="trip-cost">—</td>
+        </tr>
+    </tfoot>
 </table>
-<?php if ($share_error): ?>
-    <div class="msg"><?= h($share_error) ?></div>
-<?php endif; ?>
+<script src="js/trip_split.js"></script>
 <?php page_footer();
